@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Maximize,
   Minimize,
@@ -74,10 +74,12 @@ export default function HlsVideoPlayer({
   const hlsRef = useRef(null);
   const selectedQualityRef = useRef("auto");
   const wrapperRef = useRef(null);
+  const hideControlsTimerRef = useRef(null);
   const [levels, setLevels] = useState([]);
   const [selectedQuality, setSelectedQuality] = useState("auto");
   const [autoQualityLabel, setAutoQualityLabel] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(DEFAULT_VOLUME);
@@ -119,6 +121,36 @@ export default function HlsVideoPlayer({
   useEffect(() => {
     selectedQualityRef.current = selectedQuality;
   }, [selectedQuality]);
+
+  const clearControlsTimer = useCallback(() => {
+    if (hideControlsTimerRef.current) {
+      window.clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleControlsHide = useCallback(
+    (delay = 2200) => {
+      clearControlsTimer();
+
+      if (!isPlaying) {
+        return;
+      }
+
+      hideControlsTimerRef.current = window.setTimeout(() => {
+        setControlsVisible(false);
+      }, delay);
+    },
+    [clearControlsTimer, isPlaying]
+  );
+
+  const revealControls = useCallback(
+    (delay = 2200) => {
+      setControlsVisible(true);
+      scheduleControlsHide(delay);
+    },
+    [scheduleControlsHide]
+  );
 
   useEffect(() => {
     const video = videoRef.current;
@@ -243,8 +275,9 @@ export default function HlsVideoPlayer({
         hlsInstance.destroy();
       }
       hlsRef.current = null;
+      clearControlsTimer();
     };
-  }, [fallbackSrc, src]);
+  }, [clearControlsTimer, fallbackSrc, src]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -266,10 +299,13 @@ export default function HlsVideoPlayer({
 
     const handlePlay = () => {
       setIsPlaying(true);
+      revealControls();
     };
 
     const handlePause = () => {
       setIsPlaying(false);
+      clearControlsTimer();
+      setControlsVisible(true);
     };
 
     const handleVolumeChange = () => {
@@ -292,13 +328,26 @@ export default function HlsVideoPlayer({
       video.removeEventListener("pause", handlePause);
       video.removeEventListener("volumechange", handleVolumeChange);
     };
-  }, []);
+  }, [clearControlsTimer, revealControls]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      clearControlsTimer();
+      return;
+    }
+
+    scheduleControlsHide();
+
+    return () => clearControlsTimer();
+  }, [clearControlsTimer, isPlaying, scheduleControlsHide]);
 
   const handlePlayPause = async () => {
     const video = videoRef.current;
     if (!video) {
       return;
     }
+
+    revealControls();
 
     if (video.paused) {
       try {
@@ -325,6 +374,7 @@ export default function HlsVideoPlayer({
 
     video.currentTime = nextTime;
     setCurrentTime(nextTime);
+    revealControls(2600);
   };
 
   const handleVolumeInput = (event) => {
@@ -342,6 +392,7 @@ export default function HlsVideoPlayer({
     video.muted = nextVolume === 0;
     setVolume(nextVolume);
     setIsMuted(nextVolume === 0);
+    revealControls(2600);
   };
 
   const toggleMute = () => {
@@ -356,11 +407,13 @@ export default function HlsVideoPlayer({
       video.volume = nextVolume;
       setIsMuted(false);
       setVolume(nextVolume);
+      revealControls(2600);
       return;
     }
 
     video.muted = true;
     setIsMuted(true);
+    revealControls(2600);
   };
 
   const toggleFullscreen = async () => {
@@ -371,15 +424,18 @@ export default function HlsVideoPlayer({
 
     if (document.fullscreenElement === wrapper) {
       await document.exitFullscreen();
+      revealControls(2600);
       return;
     }
 
     await wrapper.requestFullscreen();
+    revealControls(2600);
   };
 
   const handleQualityChange = (event) => {
     const nextQuality = event.target.value;
     setSelectedQuality(nextQuality);
+    revealControls(2800);
 
     const player = hlsRef.current;
     if (player && levels.length > 0) {
@@ -431,7 +487,15 @@ export default function HlsVideoPlayer({
   };
 
   return (
-    <div ref={wrapperRef} className={wrapperClassName}>
+    <div
+      ref={wrapperRef}
+      className={wrapperClassName}
+      onMouseMove={() => revealControls()}
+      onMouseEnter={() => revealControls()}
+      onTouchStart={() => revealControls()}
+      onTouchMove={() => revealControls()}
+      onClick={() => revealControls()}
+    >
       <video
         ref={videoRef}
         className={className}
@@ -443,8 +507,21 @@ export default function HlsVideoPlayer({
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent" />
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-3 md:p-4">
-        <div className="pointer-events-auto rounded-xl border border-white/20 bg-black/65 px-3 py-3 backdrop-blur-sm">
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 p-3 transition-opacity duration-200 md:p-4 ${
+          controlsVisible ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div
+          className={`rounded-xl border border-white/20 bg-black/65 px-3 py-3 backdrop-blur-sm transition-transform duration-200 ${
+            controlsVisible
+              ? "pointer-events-auto translate-y-0"
+              : "pointer-events-none translate-y-2"
+          }`}
+          onMouseEnter={() => revealControls(3000)}
+          onMouseLeave={() => scheduleControlsHide(1400)}
+          onTouchStart={() => revealControls(3000)}
+        >
           <input
             type="range"
             min={0}
