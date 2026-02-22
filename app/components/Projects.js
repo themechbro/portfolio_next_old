@@ -7,13 +7,23 @@ import Image from "next/image";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowUpRight, Github } from "lucide-react";
+import HlsVideoPlayer from "./HlsVideoPlayer";
 
 gsap.registerPlugin(ScrollTrigger);
 
 export default function Projects() {
   const sectionRef = useRef();
+  const featuredVideoRef = useRef(null);
   const githubProfileFallback = "https://github.com/themechbro";
-  const featuredVideoPath = "/videos/linkedup.mp4";
+  const featuredVideoPath = "/videos/linkedup-hls/master.m3u8";
+  const featuredVideoFallbackPath = "/videos/linkedup.mp4";
+  const featuredVideoQualitySources = [
+    { value: "auto", label: "Auto", src: "/videos/linkedup-hls/master.m3u8" },
+    { value: "1080", label: "1080p", src: "/videos/linkedup-hls/1080p/index.m3u8" },
+    { value: "720", label: "720p", src: "/videos/linkedup-hls/720p/index.m3u8" },
+    { value: "480", label: "480p", src: "/videos/linkedup-hls/480p/index.m3u8" },
+  ];
+  const [showStreamingTip, setShowStreamingTip] = useState(false);
   const [githubStats, setGithubStats] = useState({
     loading: true,
     error: false,
@@ -36,6 +46,29 @@ export default function Projects() {
       },
     });
   }, []);
+
+  useEffect(() => {
+    if (!featuredVideoRef.current || showStreamingTip) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) {
+          return;
+        }
+
+        setShowStreamingTip(true);
+        observer.disconnect();
+      },
+      { threshold: 0.35 }
+    );
+
+    observer.observe(featuredVideoRef.current);
+
+    return () => observer.disconnect();
+  }, [showStreamingTip]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,16 +170,23 @@ export default function Projects() {
                   </p>
                 </div>
 
-                <div className="relative bg-black">
-                  <video
+                <div ref={featuredVideoRef} className="relative bg-black">
+                  {showStreamingTip && (
+                    <p className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg border border-white/20 bg-black/60 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
+                      Tip: This walkthrough uses adaptive HLS streaming. Select
+                      quality if you want to lock a resolution.
+                    </p>
+                  )}
+
+                  <HlsVideoPlayer
+                    wrapperClassName="relative"
                     className="aspect-video w-full object-cover"
-                    controls
+                    src={featuredVideoPath}
+                    fallbackSrc={featuredVideoFallbackPath}
+                    sourceOptions={featuredVideoQualitySources}
                     playsInline
                     preload="metadata"
-                  >
-                    <source src={featuredVideoPath} type="video/mp4" />
-                    <source src="/video/linkedup.mp4" type="video/mp4" />
-                  </video>
+                  />
                 </div>
               </div>
 

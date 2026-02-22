@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "video:hls": "powershell -ExecutionPolicy Bypass -File scripts/generate-hls.ps1"
   },
   "dependencies": {
     "geist": "^1.7.0",
